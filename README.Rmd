@@ -1,0 +1,507 @@
+---
+title: "OECD regional inequality 2018"
+output: github_document
+---
+
+A primer on regional inequality and data
+
+Set up, load in libraries
+
+```{r}
+#path <- your.path.to.our.repo
+#setwd(path)
+
+#libs
+libs <- c("tidyverse", "dtplyr", "data.table", "OECD", "knitr", "countrycode")
+lapply(libs, require, character.only=T)
+
+
+```
+
+
+The OECD data we're going to work with is available here: https://stats.oecd.org/Index.aspx?DataSetCode=REGION_DEMOGR#
+
+These files are massive and complex. We've downloaded the data in advance and made it available in the repo's "inputs" folder.
+
+Let's read in the file and inspect the vars
+
+```{r}
+reg.dat <- fread("inputs/oecd_raw_dat.csv")
+
+#Inspect the data, by code and descriptor var pairs
+reg.dat[, .N, .(TL, Territory.Level.and.Typology)] #TL level
+reg.dat[, .N, .(REG_ID, Region)] #Region
+reg.dat[, .N, .(SERIES, SNA.Classification)] #Series
+reg.dat[, .N, .(VAR, Indicator)] #Indicator
+reg.dat[, .N, .(MEAS, Measure)] #Measure
+reg.dat[, .N, .(POS, Position)] #Position
+reg.dat[, .N, .(TIME, Year)] %>% head() #time
+reg.dat[, .N, .(Unit.Code, Unit)] #units
+reg.dat[, .N, .(PowerCode.Code, PowerCode)] #powercode
+reg.dat[, .N, .(Reference.Period.Code, Reference.Period)] #ref period
+reg.dat[, .N, .(Flag.Codes, Flags)] #flags
+
+#We also need a names lookup file that we created
+oecd.names <- fread("inputs/oecd_names_lookup.csv")
+
+```
+
+
+First let's explore all the measures in our dataset, for UK TL3 (small) areas alone
+
+```{r}
+#---------- Which measure is best?  ----------------
+
+#Check out the GDP measures
+reg.dat[grepl("3", TL),] %>%
+  .[, .(REG_ID, Region, VAR, Indicator, MEAS, Measure, Year, Value)] %>% .[, .N, .(VAR, MEAS, Measure)]
+
+#Total GDP at TL3 (d1)
+reg.dat[VAR == "GDP" & MEAS == "REAL_PPP" & grepl("3", TL),] %>%
+  .[grepl("UK", REG_ID) & Year == 2016,] %>%
+  .[, .(REG_ID, Region, Indicator, Measure, Year, Value)] %>%
+  arrange(-Value) -> d1 #%>% kable(.)
+head(d1) %>% kable
+
+#GDP per person at TL3
+reg.dat[VAR == "GDP" & MEAS == "PC_REAL_PPP" & grepl("3", TL),] %>%
+  .[grepl("UK", REG_ID) & Year == 2016,] %>%
+  .[, .(REG_ID, Region, Indicator, Measure, Year, Value)] %>%
+  arrange(-Value) -> d2 #%>% kable(.)
+head(d2) %>% kable
+
+#Population by region (implicit)
+full_join(d1, d2, by = c("REG_ID", "Region")) %>%
+  .[, `:=`(Measure = "Population", Indicator = "Pop", Year = 2016, Value = Value.x * 10^6 / Value.y)] %>%
+  .[, .(REG_ID, Region, Indicator, Measure, Year, Value)] %>%
+  arrange(Value) -> d3
+head(d3) %>% kable
+
+#Work-based employment
+reg.dat[VAR == "EMP_IND_TOTAL" & grepl("3", TL),] %>%
+  .[grepl("UK", REG_ID) & Year == 2016,] %>%
+  .[, .(REG_ID, Region, Indicator, Measure, Year, Value)] %>%
+  arrange(-Value) -> d4
+head(d4) %>% kable
+
+#GDP per person employed
+full_join(d1, d4, by = c("REG_ID", "Region")) %>%
+  .[, `:=`(Measure = "GDP per person employed", Indicator = "GDP per person", Year = 2016, Value = Value.x * 10^6 / Value.y)] %>%
+  .[, .(REG_ID, Region, Indicator, Measure, Year, Value)] %>%
+  arrange(-Value) -> d5
+head(d5) %>% kable
+
+#Regional Gross Value Added (GDP ex. subsidies)
+reg.dat[VAR == "GVA_IND_TOTAL" & MEAS == "PW_REAL_PPP" & grepl("3", TL),] %>%
+  .[grepl("UK", REG_ID) & Year == 2016,] %>%
+  .[, .(REG_ID, Region, Indicator, Measure, Year, Value)] %>%
+  arrange(-Value) -> d6 #%>% kable(.)
+head(d6) %>% kable
+#n.b not available for all TL3 regions
+
+rbindlist(l = list(d1, d2, d3, d4, d5, d6), fill=T) -> dat.uk
+head(dat.uk) %>% kable
+
+```
+
+With this data gathered, let's see how things look in Camden & City of London versus the Isle of Angelsey: 
+
+```{r}
+#Grab Camden & Anglesey
+dat.uk[grepl("Camden", Region),] %>% kable
+dat.uk[grepl("Torbay", Region),] %>% kable
+
+#Comparing measures
+dat.uk[REG_ID %in% c("UKL11", "UKI31"),] %>%
+  dcast(Measure ~ Region, value.var = "Value") %>%
+  rename(Camden.City=2, Anglesey=3) %>%
+  mutate(mutiple = round(Camden.City / Anglesey, 3)) %>% kable(.)
+
+```
+
+The table above shows descriptive the values for each var, and the multiples between them. 
+
+Now, let's produce the same variables for every OECD country. 
+
+First we'll being with GDP per person: 
+
+
+```{r}
+
+#--------- Get GDP per person for different geographic areas ---------
+
+#National 
+reg.dat[VAR == "GDP" & MEAS == "PC_REAL_PPP" & TL == 1,] %>%
+  .[!REG_ID %in% c("OECD"), .(REG_ID, Region, Measure, Year, Value)] %>%
+  left_join(., rename(oecd.names, REG_ID = oecd.nat.code), by = "REG_ID") %>%
+  .[, .(iso3c, REG_ID, Region, Measure, Year, Value)] -> dat2.nat
+
+#GDP per person at TL2 
+reg.dat[VAR == "GDP" & MEAS == "PC_REAL_PPP" & grepl("2", TL),] %>%
+  .[, .(REG_ID, Region, Measure, Year, Value)] %>%
+  .[, oecd.imp.code := substr(REG_ID, 1, 2)] %>%
+  left_join(., oecd.names, by = "oecd.imp.code") -> dat2.tl2
+
+#GDP per person at TL3 
+reg.dat[VAR == "GDP" & MEAS == "PC_REAL_PPP" & grepl("3", TL),] %>%
+  .[, .(REG_ID, Region, Measure, Year, Value)] %>%
+  .[, oecd.imp.code := substr(REG_ID, 1, 2)] %>%
+  left_join(., oecd.names, by = "oecd.imp.code") -> dat2.tl3
+
+```
+
+With the main data isolated, dat2, for national, tl2 and tl3, let's contstruct the plot data
+
+First, the richest areas in each TL3 (TL2s for USA)
+
+```{r}
+
+#--------- Richest regions ---------
+
+print("Richest regions, latest data")
+dat2.tl3[, .SD[which.max(Value)], by=.(iso3c, Year)] %>%
+  .[, .SD[which.max(Year)], by=.(iso3c)] %>% 
+  .[, geo := "richest.region"] %>%
+  .[, .(iso3c, geo, REG_ID, Region, Measure, Year, Value)] %>%
+  arrange(iso3c) -> d2.richest.latest
+
+#Adding richest region in USA (TL2) to TL3 regions
+dat2.tl2[, .SD[which.max(Value)], by=.(iso3c, Year)] %>%
+  .[, .SD[which.max(Year)], by=.(iso3c)] %>% 
+  .[, geo := "richest.region"] %>%
+  .[iso3c == "USA", .(iso3c, geo, REG_ID, Region, Measure, Year, Value)] %>%
+  bind_rows(., d2.richest.latest) %>% 
+  arrange(iso3c) -> d2.richest.latest
+d2.richest.latest %>% kable
+
+print("Richest regions in 2000, or earliest avail.")
+dat2.tl3[REG_ID %in% d2.richest.latest$REG_ID,] %>%
+  .[Year >= 2000, .SD[which.min(Year)], by=.(iso3c)] %>%
+  .[, geo := "richest.region"] %>%
+  .[, .(iso3c, geo, REG_ID, Region, Measure, Year, Value)] %>%
+  arrange(iso3c) -> d2.richest.earliest
+
+#Adding in richest region in USA (TL2) in 2000 to TL3 regions in 2000
+dat2.tl2[REG_ID %in% d2.richest.latest$REG_ID,] %>%
+  .[Year >= 2000, .SD[which.min(Year)], by=.(iso3c)] %>%
+  .[, geo := "richest.region"] %>%
+  .[iso3c == "USA", .(iso3c, geo, REG_ID, Region, Measure, Year, Value)] %>%
+  bind_rows(., d2.richest.earliest) %>% 
+  arrange(iso3c) -> d2.richest.earliest
+d2.richest.earliest %>% kable
+
+```
+
+
+
+And repeat the steps above for the poorest regions
+
+```{r}
+
+#--------- Poorest regions ------------
+
+print("Poorest regions, latest data")
+dat2.tl3[!REG_ID %in% c("FRY50", "FRY30"), ] %>% #removing France's overseas departments
+  .[, .SD[which.min(Value)], by=.(iso3c, Year)] %>% 
+  .[, .SD[which.max(Year)], by=.(iso3c)] %>% 
+  .[, geo := "poorest.region"] %>%
+  .[, .(iso3c, geo, REG_ID, Region, Measure, Year, Value)] %>%
+  arrange(iso3c) -> d2.poorest.latest
+
+#Adding richest region in USA (TL2) to TL3 regions
+dat2.tl2[, .SD[which.min(Value)], by=.(iso3c, Year)] %>%
+  .[, .SD[which.max(Year)], by=.(iso3c)] %>% 
+  .[, geo := "poorest.region"] %>%
+  .[iso3c == "USA", .(iso3c, geo, REG_ID, Region, Measure, Year, Value)] %>%
+  bind_rows(., d2.poorest.latest) %>% 
+  arrange(iso3c) -> d2.poorest.latest
+d2.poorest.latest %>% kable
+
+print("Poorest regions in 2000, or earliest avail")
+dat2.tl3[REG_ID %in% d2.poorest.latest$REG_ID,] %>%
+  .[Year >= 2000, .SD[which.min(Year)], by=.(iso3c)] %>%
+  .[, geo := "poorest.region"] %>%
+  .[, .(iso3c, geo, REG_ID, Region, Measure, Year, Value)] %>%
+  arrange(iso3c) -> d2.poorest.earliest
+
+#Adding in poorest region in USA (TL2) in 2000 to TL3 regions in 2000
+dat2.tl2[REG_ID %in% d2.poorest.latest$REG_ID,] %>%
+  .[Year >= 2000, .SD[which.min(Year)], by=.(iso3c)] %>%
+  .[, geo := "poorest.region"] %>%
+  .[iso3c == "USA", .(iso3c, geo, REG_ID, Region, Measure, Year, Value)] %>%
+  bind_rows(., d2.poorest.earliest) %>% 
+  arrange(iso3c) -> d2.poorest.earliest
+d2.poorest.earliest %>% kable
+
+
+```
+
+
+And then the national averages, being careful to match the same years above: 
+
+```{r}
+
+#--------- National averages (matching years with richest and poorest above) ---------
+
+print("Nat average, match year to latest year in richest/poorest")
+dat2.nat[iso3c %in% d2.richest.latest$iso3c,]  %>%
+  inner_join(., d2.richest.latest[,.(iso3c, Year)], by = c("iso3c", "Year")) %>%
+  .[, geo := "national.av"] %>%
+  .[, .(iso3c, geo, REG_ID, Region, Measure, Year, Value)] %>%
+  arrange(iso3c) -> d2.nat.latest
+d2.nat.latest %>% kable
+
+print("Nat average, 2000 or earliest avail.")
+dat2.nat[iso3c %in% d2.richest.earliest$iso3c,]  %>%
+  inner_join(., d2.richest.earliest[,.(iso3c, Year)], by = c("iso3c", "Year")) %>%
+  .[, geo := "national.av"] %>%
+  .[, .(iso3c, geo, REG_ID, Region, Measure, Year, Value)] %>%
+  arrange(iso3c) -> d2.nat.earliest
+d2.nat.earliest %>% kable
+
+```
+
+
+Now gather the data together (bind) and plot it (roughly)
+
+```{r}
+
+#Bind data
+rbindlist(l = list(d2.nat.latest, d2.nat.earliest, 
+                   d2.richest.latest, d2.richest.earliest, 
+                   d2.poorest.latest, d2.poorest.earliest)) %>%
+  left_join(., oecd.names, by = "iso3c") %>%
+  dcast(country + iso3c + Year ~ geo, value.var = "Value") %>%
+  mutate(indx.poorest.region = poorest.region / national.av * 100, 
+         indx.richest.region = richest.region / national.av * 100) -> rich.poor.1
+rich.poor.1 %>% kable
+
+#The countries in our original chart
+plot.iso <- c("GBR", "DEU", "USA", "FRA", "KOR", "ITA", "JPA", "ESP", "SWE")
+
+#Plot it
+rich.poor.1 %>% 
+  filter(iso3c %in% plot.iso) %>%
+  select(country, Year, poorest=indx.poorest.region, richest=indx.richest.region) %>% 
+  melt(id.vars = c("country", "Year"), variable.name = "geo") -> plot.dat.1
+plot.dat.1 %>% kable
+write_csv(plot.dat.1, "outputs/plot.dat.1.csv")
+  
+ggplot(plot.dat.1, aes(x=value, y=1, colour=Year)) + geom_point() + geom_text(aes(label=geo, vjust=-1)) +
+  facet_wrap(~country, ncol=1) + xlim(0, 1200) + theme_minimal() +
+  theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank()) + 
+  theme(legend.position="top") + ggtitle("Richest v poorest regions") -> plot1
+print(plot1)
+```
+
+
+Now, as the Medium piece discusses (https://medium.economist.com/a9376718348) while in context of the original Economist piece
+discussing regional inequality (https://www.economist.com/briefing/2017/10/21/globalisation-has-marginalised-many-regions-in-the-rich-world) 
+the measure is useful. It has since been taken out of context. 
+
+So, let's introduce an alternative measure, keeping the richest and poorest regions (for ease of communication) but dividing a region's GDP not by 
+its population but the number of employees working there. 
+
+```{r}
+
+#------- Total GDP ----------
+
+#National 
+reg.dat[VAR == "GDP" & MEAS == "REAL_PPP" & TL == 1,] %>%
+  .[!REG_ID %in% c("OECD"), .(REG_ID, Region, Measure, Year, Value)] %>%
+  left_join(., rename(oecd.names, REG_ID = oecd.nat.code), by = "REG_ID") %>%
+  .[, .(iso3c, REG_ID, Region, Measure, Year, Value)] -> dat1.nat
+
+#TL2 
+reg.dat[VAR == "GDP" & MEAS == "REAL_PPP" & grepl("2", TL),] %>%
+  .[, .(REG_ID, Region, Measure, Year, Value)] %>%
+  .[, oecd.imp.code := substr(REG_ID, 1, 2)] %>%
+  left_join(., oecd.names, by = "oecd.imp.code") -> dat1.tl2
+
+#TL3 
+reg.dat[VAR == "GDP" & MEAS == "REAL_PPP" & grepl("3", TL),] %>%
+  .[, .(REG_ID, Region, Measure, Year, Value)] %>%
+  .[, oecd.imp.code := substr(REG_ID, 1, 2)] %>%
+  left_join(., oecd.names, by = "oecd.imp.code") -> dat1.tl3
+
+
+#------- Work-based employment ---------
+
+#National 
+reg.dat[VAR == "EMP_IND_TOTAL" & TL == 1,] %>%
+  .[!REG_ID %in% c("OECD"), .(REG_ID, Region, Measure, Year, Value)] %>%
+  left_join(., rename(oecd.names, REG_ID = oecd.nat.code), by = "REG_ID") %>%
+  .[, .(iso3c, REG_ID, Region, Measure, Year, Value)] -> dat4.nat
+
+#TL2 
+reg.dat[VAR == "EMP_IND_TOTAL" & grepl("2", TL),] %>%
+  .[, .(REG_ID, Region, Measure, Year, Value)] %>%
+  .[, oecd.imp.code := substr(REG_ID, 1, 2)] %>%
+  left_join(., oecd.names, by = "oecd.imp.code") -> dat4.tl2
+
+#TL3 
+reg.dat[VAR == "EMP_IND_TOTAL" & grepl("3", TL),] %>%
+  .[, .(REG_ID, Region, Measure, Year, Value)] %>%
+  .[, oecd.imp.code := substr(REG_ID, 1, 2)] %>%
+  left_join(., oecd.names, by = "oecd.imp.code") -> dat4.tl3
+
+
+#------ GDP per person employed (implicit) --------
+
+#National 
+full_join(dat1.nat, dat4.nat, by = c("iso3c", "REG_ID", "Region", "Year")) %>%
+  .[, `:=`(Measure = "GDP per person employed", Value = Value.x * 10^6 / Value.y)] %>%
+  .[!is.na(Value), .(iso3c, REG_ID, Region, Measure, Year, Value)]  -> dat5.nat
+
+#TL2
+full_join(dat1.tl2, dat4.tl2, by = c("iso3c", "REG_ID", "Region", "Year")) %>%
+  .[, `:=`(Measure = "GDP per person employed", Value = Value.x * 10^6 / Value.y)] %>%
+  .[!is.na(Value), .(iso3c, REG_ID, Region, Measure, Year, Value)] -> dat5.tl2
+
+#TL3
+full_join(dat1.tl3, dat4.tl3, by = c("iso3c", "REG_ID", "Region", "Year")) %>%
+  .[, `:=`(Measure = "GDP per person employed", Value = Value.x * 10^6 / Value.y)] %>%
+  .[!is.na(Value), .(iso3c, REG_ID, Region, Measure, Year, Value)] -> dat5.tl3
+
+
+```
+
+Now we have the data we need, we'll breeze through the next steps as they repeat those for the GDP per person measure above. 
+
+```{r}
+
+#------- Richest regions, GDP per person --------- 
+
+#Richest regions, latest data
+dat5.tl3[, .SD[which.max(Value)], by=.(iso3c, Year)] %>%
+  .[, .SD[which.max(Year)], by=.(iso3c)] %>% 
+  .[, geo := "richest.region"] %>%
+  .[, .(iso3c, geo, REG_ID, Region, Measure, Year, Value)] %>%
+  arrange(iso3c) -> d5.richest.latest
+
+#Adding richest region in USA (TL2) to TL3 regions
+dat5.tl2[, .SD[which.max(Value)], by=.(iso3c, Year)] %>%
+  .[, .SD[which.max(Year)], by=.(iso3c)] %>% 
+  .[, geo := "richest.region"] %>%
+  .[iso3c == "USA", .(iso3c, geo, REG_ID, Region, Measure, Year, Value)] %>%
+  bind_rows(., d5.richest.latest) %>% 
+  arrange(iso3c) -> d5.richest.latest
+d5.richest.latest %>% kable
+
+#Richest regions in 2000, or earliest avail. 
+dat5.tl3[REG_ID %in% d5.richest.latest$REG_ID,] %>%
+  .[Year >= 2000, .SD[which.min(Year)], by=.(iso3c)] %>%
+  .[, geo := "richest.region"] %>%
+  .[, .(iso3c, geo, REG_ID, Region, Measure, Year, Value)] %>%
+  arrange(iso3c) -> d5.richest.earliest
+
+#Adding in richest region in USA (TL2) in 2000 to TL3 regions in 2000
+dat5.tl2[REG_ID %in% d5.richest.latest$REG_ID,] %>%
+  .[Year >= 2000, .SD[which.min(Year)], by=.(iso3c)] %>%
+  .[, geo := "richest.region"] %>%
+  .[iso3c == "USA", .(iso3c, geo, REG_ID, Region, Measure, Year, Value)] %>%
+  bind_rows(., d5.richest.earliest) %>% 
+  arrange(iso3c) -> d5.richest.earliest
+d5.richest.earliest %>% kable
+
+
+#--------- Poorest regions, GDP per person employed ------------
+
+#Poorest regions, latest data
+dat5.tl3[!REG_ID %in% c("FRY50", "FRY30"), ] %>% #removing France's overseas departments
+  .[, .SD[which.min(Value)], by=.(iso3c, Year)] %>% 
+  .[, .SD[which.max(Year)], by=.(iso3c)] %>% 
+  .[, geo := "poorest.region"] %>%
+  .[, .(iso3c, geo, REG_ID, Region, Measure, Year, Value)] %>%
+  arrange(iso3c) -> d5.poorest.latest
+
+#Adding richest region in USA (TL2) to TL3 regions
+dat5.tl2[, .SD[which.min(Value)], by=.(iso3c, Year)] %>%
+  .[, .SD[which.max(Year)], by=.(iso3c)] %>% 
+  .[, geo := "poorest.region"] %>%
+  .[iso3c == "USA", .(iso3c, geo, REG_ID, Region, Measure, Year, Value)] %>%
+  bind_rows(., d5.poorest.latest) %>% 
+  arrange(iso3c) -> d5.poorest.latest
+d5.poorest.latest %>% kable
+
+#Poorest regions in 2000, or earliest avail. 
+dat5.tl3[REG_ID %in% d5.poorest.latest$REG_ID,] %>%
+  .[Year >= 2000, .SD[which.min(Year)], by=.(iso3c)] %>%
+  .[, geo := "poorest.region"] %>%
+  .[, .(iso3c, geo, REG_ID, Region, Measure, Year, Value)] %>%
+  arrange(iso3c) -> d5.poorest.earliest
+
+#Adding in poorest region in USA (TL2) in 2000 to TL3 regions in 2000
+dat5.tl2[REG_ID %in% d5.poorest.latest$REG_ID,] %>%
+  .[Year >= 2000, .SD[which.min(Year)], by=.(iso3c)] %>%
+  .[, geo := "poorest.region"] %>%
+  .[iso3c == "USA", .(iso3c, geo, REG_ID, Region, Measure, Year, Value)] %>%
+  bind_rows(., d5.poorest.earliest) %>% 
+  arrange(iso3c) -> d5.poorest.earliest
+d5.poorest.earliest %>% kable
+
+
+
+#------- Nationl averages, GDP per person employed, matching years above ------- 
+
+
+#Nat average, match year to latest year in richest/poorest 
+dat5.nat[iso3c %in% d5.richest.latest$iso3c,]  %>%
+  inner_join(., d5.richest.latest[,.(iso3c, Year)], by = c("iso3c", "Year")) %>%
+  .[, geo := "national.av"] %>%
+  .[, .(iso3c, geo, REG_ID, Region, Measure, Year, Value)] %>%
+  arrange(iso3c) -> d5.nat.latest
+d5.nat.latest %>% kable
+
+#Nat average, 2000 or earliest avail.
+dat5.nat[iso3c %in% d5.richest.earliest$iso3c,]  %>%
+  inner_join(., d5.richest.earliest[,.(iso3c, Year)], by = c("iso3c", "Year")) %>%
+  .[, geo := "national.av"] %>%
+  .[, .(iso3c, geo, REG_ID, Region, Measure, Year, Value)] %>%
+  arrange(iso3c) -> d5.nat.earliest
+d5.nat.earliest %>% kable
+
+
+```
+
+
+Again, let's bind the data together and plot our new measure. 
+
+```{r}
+
+
+#------- Bind data together and plot  -------- 
+
+rbindlist(l = list(d5.nat.latest, d5.nat.earliest, 
+                   d5.richest.latest, d5.richest.earliest, 
+                   d5.poorest.latest, d5.poorest.earliest)) %>%
+  left_join(., oecd.names, by = "iso3c") %>%
+  dcast(country + iso3c + Year ~ geo, value.var = "Value") %>%
+  mutate(indx.poorest.region = poorest.region / national.av * 100, 
+         indx.richest.region = richest.region / national.av * 100) -> rich.poor.2
+rich.poor.2 %>% kable
+
+#The countries in our original chart
+plot.iso <- c("GBR", "DEU", "USA", "FRA", "KOR", "ITA", "JPA", "ESP", "SWE")
+
+#Plot it
+rich.poor.2 %>% 
+  filter(iso3c %in% plot.iso) %>%
+  select(country, Year, poorest=indx.poorest.region, richest=indx.richest.region) %>% 
+  melt(id.vars = c("country", "Year"), variable.name = "geo") -> plot.dat.2
+plot.dat.2 %>% kable
+write_csv(plot.dat.2, "outputs/plot.dat.2.csv")
+
+ggplot(plot.dat.2, aes(x=value, y=1, colour=Year)) + geom_point() + geom_text(aes(label=geo, vjust=-1)) +
+  facet_wrap(~country, ncol=1) + theme_minimal() +
+  theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank()) + 
+  theme(legend.position="top") + ggtitle("Richest v poorest regions, GDP per person employed") -> plot2
+print(plot2)
+
+```
+
+
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.

@@ -1,0 +1,50 @@
+country,iso3c,iso2c,oecd.nat.code,oecd.imp.code
+Austria,AUT,AT,AUT,AT
+Australia,AUS,AU,AUS,AU
+Belgium,BEL,BE,BEL,BE
+Bulgaria,BGR,BG,BGR,BG
+Brazil,BRA,BR,BRA,BR
+Canada,CAN,CA,CAN,CA
+Switzerland,CHE,CH,CHE,CH
+Chile,CHL,CL,CHL,CL
+China,CHN,CN,CHN,CN
+Colombia,COL,CO,COL,CO
+Cyprus,CYP,CY,CYP,CY
+Czechia,CZE,CZ,CZE,CZ
+Germany,DEU,DE,DEU,DE
+Denmark,DNK,DK,DNK,DK
+Estonia,EST,EE,EST,EE
+Spain,ESP,ES,ESP,ES
+Finland,FIN,FI,FIN,FI
+France,FRA,FR,FRA,FR
+Britain,GBR,GB,GBR,UK
+Greece,GRC,GR,GRC,EL
+Croatia,HRV,HR,HRV,HR
+Hungary,HUN,HU,HUN,HU
+Indonesia,IDN,ID,IDN,ID
+Ireland,IRL,IE,IRL,IE
+Israel,ISR,IL,ISR,IL
+India,IND,IN,IND,IN
+Iceland,ISL,IS,ISL,IS
+Italy,ITA,IT,ITA,IT
+Japan,JPN,JP,JPN,JP
+South Korea,KOR,KR,KOR,KR
+Lithuania,LTU,LT,LTU,LT
+Luxembourg,LUX,LU,LUX,LU
+Latvia,LVA,LV,LVA,LV
+Malta,MLT,MT,MLT,MT
+Mexico,MEX,MX,MEX,ME
+Netherlands,NLD,NL,NLD,NL
+Norway,NOR,NO,NOR,NO
+New Zealand,NZL,NZ,NZL,NZ
+Peru,PER,PE,PER,PE
+Poland,POL,PL,POL,PL
+Portugal,PRT,PT,PRT,PT
+Romania,ROU,RO,ROU,RO
+Russia,RUS,RU,RUS,RU
+Sweden,SWE,SE,SWE,SE
+Slovenia,SVN,SI,SVN,SI
+Slovakia,SVK,SK,SVK,SK
+Turkey,TUR,TR,TUR,TR
+United States,USA,US,USA,US
+South Africa,ZAF,ZA,ZAF,ZA
