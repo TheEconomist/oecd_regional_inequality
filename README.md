@@ -595,7 +595,7 @@ d2.poorest.latest %>% kable
 | LVA   | poorest.region | LV005   | Latgale                     | USD per head, constant prices, constant PPP, base year 2010 |  2015|  11503|
 | MLT   | poorest.region | MT002   | Malta                       | USD per head, constant prices, constant PPP, base year 2010 |  2016|  20461|
 | NLD   | poorest.region | NL111   | Oost-Groningen              | USD per head, constant prices, constant PPP, base year 2010 |  2015|  23389|
-| NOR   | poorest.region | NO031   | Ã˜stfold                    | USD per head, constant prices, constant PPP, base year 2010 |  2016|  36252|
+| NOR   | poorest.region | NO031   | Ãstfold                    | USD per head, constant prices, constant PPP, base year 2010 |  2016|  36252|
 | NZL   | poorest.region | NZ011   | Northland Region            | USD per head, constant prices, constant PPP, base year 2010 |  2016|  24503|
 | POL   | poorest.region | PL312   | Chelmsko-Zamojski           | USD per head, constant prices, constant PPP, base year 2010 |  2015|  12864|
 | PRT   | poorest.region | PT11C   | TÃ¢mega e Sousa             | USD per head, constant prices, constant PPP, base year 2010 |  2015|  16761|
@@ -656,7 +656,7 @@ d2.poorest.earliest %>% kable
 | LVA   | poorest.region | LV005   | Latgale                     | USD per head, constant prices, constant PPP, base year 2010 |  2000|   5298|
 | MLT   | poorest.region | MT002   | Malta                       | USD per head, constant prices, constant PPP, base year 2010 |  2001|  17262|
 | NLD   | poorest.region | NL111   | Oost-Groningen              | USD per head, constant prices, constant PPP, base year 2010 |  2000|  21845|
-| NOR   | poorest.region | NO031   | Ã˜stfold                    | USD per head, constant prices, constant PPP, base year 2010 |  2000|  30846|
+| NOR   | poorest.region | NO031   | Ãstfold                    | USD per head, constant prices, constant PPP, base year 2010 |  2000|  30846|
 | NZL   | poorest.region | NZ011   | Northland Region            | USD per head, constant prices, constant PPP, base year 2010 |  2000|  19006|
 | POL   | poorest.region | PL312   | Chelmsko-Zamojski           | USD per head, constant prices, constant PPP, base year 2010 |  2000|   8793|
 | PRT   | poorest.region | PT11C   | TÃ¢mega e Sousa             | USD per head, constant prices, constant PPP, base year 2010 |  2000|  14169|
@@ -923,7 +923,7 @@ print(plot1)
 
 ![](README_files/figure-markdown_github/unnamed-chunk-9-1.png)
 
-Now, as the Medium piece discusses (<https://medium.economist.com/a9376718348>) while in context of the original Economist piece discussing regional inequality (<https://www.economist.com/briefing/2017/10/21/globalisation-has-marginalised-many-regions-in-the-rich-world>) the measure is useful. It has since been taken out of context.
+Now, as the Medium piece discusses while in context of the original Economist piece discussing regional inequality (<https://www.economist.com/briefing/2017/10/21/globalisation-has-marginalised-many-regions-in-the-rich-world>) the measure is useful. It has since been taken out of context.
 
 So, let's introduce an alternative measure, keeping the richest and poorest regions (for ease of communication) but dividing a region's GDP not by its population but the number of employees working there.
 
@@ -1456,7 +1456,3 @@ print(plot2)
 ```
 
 ![](README_files/figure-markdown_github/unnamed-chunk-12-1.png)
-
-When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
-
-The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.

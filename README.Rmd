@@ -295,7 +295,7 @@ print(plot1)
 ```
 
 
-Now, as the Medium piece discusses (https://medium.economist.com/a9376718348) while in context of the original Economist piece
+Now, as the Medium piece discusses while in context of the original Economist piece
 discussing regional inequality (https://www.economist.com/briefing/2017/10/21/globalisation-has-marginalised-many-regions-in-the-rich-world) 
 the measure is useful. It has since been taken out of context. 
 
